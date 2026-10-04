@@ -7,10 +7,9 @@ on:
     branches:
       - main
       - build-cn-distribution
+      - "release/*"
     tags:
       - "v*-cn*"
-    branches:
-      - "release/*"
 
 permissions:
   contents: read
