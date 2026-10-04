@@ -7,11 +7,11 @@
   },
   "ux": {
     "repository": "snownico0722/AutoHotkeyUX",
-    "ref": "8a16a74180b375542ea14f4b9e067c68cd064185"
+    "ref": "e4b3c951f34d9cb7f43a9921cfdbdb211bf34b06"
   },
   "ahk2exe": {
     "repository": "snownico0722/Ahk2Exe",
-    "ref": "0cc9b004c4d101061338f81399cbf8806487f2ce",
+    "ref": "06b7892cff5f87843cd4b44a8370660cbc21b262",
     "upstreamVersion": "1.1.37.02a2",
     "upstreamSha256": "c29b8c3a5124850d79fc9e66e2ca79677c377d7f31631ad3022ba159c5d9e3be"
   },
