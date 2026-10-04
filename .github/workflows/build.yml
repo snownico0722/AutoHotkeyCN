@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - main
-      - build-cn-distribution
       - "release/*"
     tags:
       - "v*-cn*"
@@ -167,6 +166,121 @@ jobs:
 
           $officialCompiler = Get-ChildItem "$env:RUNNER_TEMP\compiler" -Recurse -Filter Ahk2Exe.exe | Select-Object -First 1
           if (-not $officialCompiler) { throw "Official Ahk2Exe.exe was not found." }
+
+          $compilerVersion = "${{ steps.versions.outputs.compiler_upstream }}"
+          if ($compilerVersion -notmatch '^\d+\.\d+\.\d+\.\d+(.*)
+            '/in', "$pwd\sources\Ahk2Exe\Ahk2Exe.ahk",
+            '/out', $localizedExe,
+            '/base', $base.FullName,
+            '/compress', '0',
+            '/silent', 'verbose'
+          )
+          $process = Start-Process -FilePath $officialCompiler.FullName -ArgumentList $args -Wait -PassThru
+          if ($process.ExitCode -ne 0 -and -not (Test-Path $localizedExe)) {
+            throw "Localized Ahk2Exe compilation failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path $localizedExe)) { throw "Localized Ahk2Exe.exe was not produced." }
+
+          $strings = [System.Text.Encoding]::Unicode.GetString([System.IO.File]::ReadAllBytes($localizedExe))
+          if (-not $strings.Contains($compilerVersion)) {
+            throw "Compiled Ahk2Exe does not contain expected version $compilerVersion."
+          }
+
+          $compilerDir = "$pwd\dist\AutoHotkey\Compiler"
+          New-Item -ItemType Directory -Path $compilerDir -Force | Out-Null
+          Copy-Item (Join-Path $officialCompiler.DirectoryName '*') $compilerDir -Recurse -Force
+          Copy-Item $localizedExe "$compilerDir\Ahk2Exe.exe" -Force
+          Copy-Item "$pwd\sources\Ahk2Exe\COPYING" "$compilerDir\COPYING" -Force
+
+      - name: Add Chinese launcher and build metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$pwd\dist\AutoHotkey"
+
+          @'
+          @echo off
+          chcp 65001 >nul
+          cd /d "%~dp0"
+          start "" "%~dp0AutoHotkey32.exe" "%~dp0UX\ui-setup.ahk"
+          '@ | Set-Content "$root\安装中文版.cmd" -Encoding UTF8
+
+          @"
+          AutoHotkeyCN
+
+          Core: AutoHotkey v${{ steps.versions.outputs.ahk_version }}（官方原版）
+          UX: ${{ steps.versions.outputs.ux_repo }} @ ${{ steps.versions.outputs.ux_ref }}
+          Ahk2Exe: ${{ steps.versions.outputs.compiler_repo }} @ ${{ steps.versions.outputs.compiler_ref }}
+
+          这是非官方社区中文版本。
+          "@ | Set-Content "$root\AutoHotkeyCN-构建信息.txt" -Encoding UTF8
+
+          Copy-Item "$pwd\THIRD_PARTY.md" "$root\第三方组件与许可.md" -Force
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = "${{ steps.versions.outputs.ahk_version }}"
+          $name = "AutoHotkey_${version}_CN"
+          $zip = "$pwd\$name.zip"
+
+          Compress-Archive -Path "$pwd\dist\AutoHotkey\*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name.zip" | Set-Content "$pwd\$name.zip.sha256" -Encoding ASCII
+
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "sha=$pwd\$name.zip.sha256" >> $env:GITHUB_OUTPUT
+
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.sha }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/') || (startsWith(github.ref_name, 'release/') && github.event.before == '0000000000000000000000000000000000000000')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve release tag
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag.StartsWith('release/')) { $tag = $tag.Substring(8) }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Download package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: release
+
+      - name: Publish tagged release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: AutoHotkeyCN ${{ steps.release_meta.outputs.tag }}
+          files: |
+            release/*.zip
+            release/*.sha256
+          generate_release_notes: true
+) {
+            throw "Unable to derive Ahk2Exe sub-version from $compilerVersion."
+          }
+          $subVersion = $Matches[1]
+          if (-not $subVersion) { throw "Ahk2Exe sub-version is empty." }
+          "SubVer := `"$subVersion`"" | Set-Content "$pwd\sources\Ahk2Exe\SubVer.ahk" -Encoding ASCII
 
           $localizedExe = "$env:RUNNER_TEMP\Ahk2Exe-CN.exe"
           $args = @(
