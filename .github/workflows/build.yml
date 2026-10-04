@@ -1,0 +1,273 @@
+name: Build AutoHotkeyCN
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - build-cn-distribution
+      - "release/*"
+    tags:
+      - "v*-cn*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.package.outputs.name }}
+
+    steps:
+      - name: Checkout AutoHotkeyCN
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Read pinned versions
+        id: versions
+        shell: pwsh
+        run: |
+          $v = Get-Content "$pwd\versions.json" -Raw | ConvertFrom-Json
+          "ahk_version=$($v.autohotkey.version)" >> $env:GITHUB_OUTPUT
+          "ahk_tag=$($v.autohotkey.tag)" >> $env:GITHUB_OUTPUT
+          "ahk_zip=$($v.autohotkey.zip)" >> $env:GITHUB_OUTPUT
+          "ahk_sha256=$($v.autohotkey.sha256)" >> $env:GITHUB_OUTPUT
+          "ux_repo=$($v.ux.repository)" >> $env:GITHUB_OUTPUT
+          "ux_ref=$($v.ux.ref)" >> $env:GITHUB_OUTPUT
+          "compiler_repo=$($v.ahk2exe.repository)" >> $env:GITHUB_OUTPUT
+          "compiler_ref=$($v.ahk2exe.ref)" >> $env:GITHUB_OUTPUT
+          "compiler_upstream=$($v.ahk2exe.upstreamVersion)" >> $env:GITHUB_OUTPUT
+          "compiler_sha256=$($v.ahk2exe.upstreamSha256)" >> $env:GITHUB_OUTPUT
+          "ahk1_version=$($v.bootstrap.autohotkeyV1Version)" >> $env:GITHUB_OUTPUT
+          "ahk1_sha256=$($v.bootstrap.autohotkeyV1Sha256)" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout localized AutoHotkeyUX
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ steps.versions.outputs.ux_repo }}
+          ref: ${{ steps.versions.outputs.ux_ref }}
+          path: sources/AutoHotkeyUX
+          persist-credentials: false
+
+      - name: Checkout localized Ahk2Exe
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ steps.versions.outputs.compiler_repo }}
+          ref: ${{ steps.versions.outputs.compiler_ref }}
+          path: sources/Ahk2Exe
+          persist-credentials: false
+
+      - name: Download and verify official packages
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ahkTag = "${{ steps.versions.outputs.ahk_tag }}"
+          $ahkZipName = "${{ steps.versions.outputs.ahk_zip }}"
+          $ahk1 = "${{ steps.versions.outputs.ahk1_version }}"
+          $compiler = "${{ steps.versions.outputs.compiler_upstream }}"
+
+          $ahk2Zip = "$env:RUNNER_TEMP\ahk2.zip"
+          $ahk1Zip = "$env:RUNNER_TEMP\ahk1.zip"
+          $compilerZip = "$env:RUNNER_TEMP\compiler.zip"
+
+          Invoke-WebRequest "https://github.com/AutoHotkey/AutoHotkey/releases/download/$ahkTag/$ahkZipName" -OutFile $ahk2Zip
+          Invoke-WebRequest "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$ahk1/AutoHotkey_$ahk1.zip" -OutFile $ahk1Zip
+          Invoke-WebRequest "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe$compiler/Ahk2Exe$compiler.zip" -OutFile $compilerZip
+
+          $ahk2Hash = (Get-FileHash $ahk2Zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $ahk1Hash = (Get-FileHash $ahk1Zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $compilerHash = (Get-FileHash $compilerZip -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          if ($ahk2Hash -ne "${{ steps.versions.outputs.ahk_sha256 }}") { throw "AutoHotkey v2 ZIP SHA256 mismatch: $ahk2Hash" }
+          if ($ahk1Hash -ne "${{ steps.versions.outputs.ahk1_sha256 }}") { throw "AutoHotkey v1 ZIP SHA256 mismatch: $ahk1Hash" }
+          if ($compilerHash -ne "${{ steps.versions.outputs.compiler_sha256 }}") { throw "Ahk2Exe ZIP SHA256 mismatch: $compilerHash" }
+
+          Expand-Archive $ahk2Zip "$env:RUNNER_TEMP\ahk2" -Force
+          Expand-Archive $ahk1Zip "$env:RUNNER_TEMP\ahk1" -Force
+          Expand-Archive $compilerZip "$env:RUNNER_TEMP\compiler" -Force
+
+      - name: Assemble official AutoHotkey base
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $extract = "$env:RUNNER_TEMP\ahk2"
+
+          $root = $null
+          $candidates = @((Get-Item $extract)) + @(Get-ChildItem $extract -Directory -Recurse)
+          foreach ($candidate in $candidates) {
+            if ((Test-Path (Join-Path $candidate.FullName 'UX')) -and
+                (Test-Path (Join-Path $candidate.FullName 'AutoHotkey32.exe'))) {
+              $root = $candidate.FullName
+              break
+            }
+          }
+          if (-not $root) { throw "Could not locate AutoHotkey portable distribution root (UX + AutoHotkey32.exe)." }
+
+          New-Item -ItemType Directory -Path "$pwd\dist\AutoHotkey" -Force | Out-Null
+          Copy-Item (Join-Path $root '*') "$pwd\dist\AutoHotkey" -Recurse -Force
+
+      - name: Overlay localized AutoHotkeyUX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = "$pwd\sources\AutoHotkeyUX"
+          $dst = "$pwd\dist\AutoHotkey\UX"
+
+          Get-ChildItem $src -Force | Where-Object {
+            $_.Name -notin @('.git', '.github', 'tools')
+          } | ForEach-Object {
+            Copy-Item $_.FullName $dst -Recurse -Force
+          }
+
+          $dash = Get-Content "$dst\ui-dash.ahk" -Raw
+          if (-not $dash.Contains('AutoHotkey 控制面板')) {
+            throw "Localized AutoHotkeyUX overlay verification failed."
+          }
+
+      - name: Validate localized AutoHotkeyUX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ahk = "$pwd\dist\AutoHotkey\AutoHotkey64.exe"
+          if (-not (Test-Path $ahk)) { $ahk = "$pwd\dist\AutoHotkey\AutoHotkey32.exe" }
+          if (-not (Test-Path $ahk)) { throw "AutoHotkey interpreter was not found in assembled package." }
+
+          $scripts = @(
+            'ui-setup.ahk',
+            'ui-uninstall.ahk',
+            'ui-dash.ahk',
+            'ui-newscript.ahk',
+            'ui-editor.ahk',
+            'ui-launcherconfig.ahk',
+            'install-ahk2exe.ahk',
+            'install.ahk'
+          )
+
+          foreach ($script in $scripts) {
+            $path = "$pwd\dist\AutoHotkey\UX\$script"
+            $err = Join-Path $env:RUNNER_TEMP (($script -replace '[\\/:*?"<>|]', '_') + '.err.txt')
+            $args = @("/ErrorStdOut=$err", '/validate', $path)
+            $p = Start-Process -FilePath $ahk -ArgumentList $args -Wait -PassThru
+            $errorText = if (Test-Path $err) { Get-Content $err -Raw } else { '' }
+            if ($p.ExitCode -ne 0 -or $errorText.Trim()) {
+              throw "Validation failed for $script (exit $($p.ExitCode))`n$errorText"
+            }
+          }
+
+      - name: Build and install localized Ahk2Exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $base = Get-ChildItem "$env:RUNNER_TEMP\ahk1" -Recurse -Filter AutoHotkeyU32.exe | Select-Object -First 1
+          if (-not $base) { throw "AutoHotkeyU32.exe was not found." }
+
+          $officialCompiler = Get-ChildItem "$env:RUNNER_TEMP\compiler" -Recurse -Filter Ahk2Exe.exe | Select-Object -First 1
+          if (-not $officialCompiler) { throw "Official Ahk2Exe.exe was not found." }
+
+          $localizedExe = "$env:RUNNER_TEMP\Ahk2Exe-CN.exe"
+          $args = @(
+            '/in', "$pwd\sources\Ahk2Exe\Ahk2Exe.ahk",
+            '/out', $localizedExe,
+            '/base', $base.FullName,
+            '/compress', '0',
+            '/silent', 'verbose'
+          )
+          $process = Start-Process -FilePath $officialCompiler.FullName -ArgumentList $args -Wait -PassThru
+          if ($process.ExitCode -ne 0 -and -not (Test-Path $localizedExe)) {
+            throw "Localized Ahk2Exe compilation failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path $localizedExe)) { throw "Localized Ahk2Exe.exe was not produced." }
+
+          $compilerDir = "$pwd\dist\AutoHotkey\Compiler"
+          New-Item -ItemType Directory -Path $compilerDir -Force | Out-Null
+          Copy-Item (Join-Path $officialCompiler.DirectoryName '*') $compilerDir -Recurse -Force
+          Copy-Item $localizedExe "$compilerDir\Ahk2Exe.exe" -Force
+          Copy-Item "$pwd\sources\Ahk2Exe\COPYING" "$compilerDir\COPYING" -Force
+
+      - name: Add Chinese launcher and build metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$pwd\dist\AutoHotkey"
+
+          @'
+          @echo off
+          chcp 65001 >nul
+          cd /d "%~dp0"
+          start "" "%~dp0AutoHotkey32.exe" "%~dp0UX\ui-setup.ahk"
+          '@ | Set-Content "$root\安装中文版.cmd" -Encoding UTF8
+
+          @"
+          AutoHotkeyCN 预览版
+
+          Core: AutoHotkey v${{ steps.versions.outputs.ahk_version }}（官方原版）
+          UX: ${{ steps.versions.outputs.ux_repo }} @ ${{ steps.versions.outputs.ux_ref }}
+          Ahk2Exe: ${{ steps.versions.outputs.compiler_repo }} @ ${{ steps.versions.outputs.compiler_ref }}
+
+          这是非官方社区中文版本。
+          "@ | Set-Content "$root\AutoHotkeyCN-构建信息.txt" -Encoding UTF8
+
+          Copy-Item "$pwd\THIRD_PARTY.md" "$root\第三方组件与许可.md" -Force
+
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = "${{ steps.versions.outputs.ahk_version }}"
+          $name = "AutoHotkey_${version}_CN-preview"
+          $zip = "$pwd\$name.zip"
+
+          Compress-Archive -Path "$pwd\dist\AutoHotkey\*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name.zip" | Set-Content "$pwd\$name.zip.sha256" -Encoding ASCII
+
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "sha=$pwd\$name.zip.sha256" >> $env:GITHUB_OUTPUT
+
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.sha }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref_name, 'release/')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve release tag
+        id: release_meta
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag.StartsWith('release/')) { $tag = $tag.Substring(8) }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Download package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: release
+
+      - name: Publish tagged release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: AutoHotkeyCN ${{ steps.release_meta.outputs.tag }}
+          files: |
+            release/*.zip
+            release/*.sha256
+          generate_release_notes: true

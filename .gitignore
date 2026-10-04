@@ -1,0 +1,4 @@
+dist/
+sources/
+*.zip
+*.sha256
