@@ -1,0 +1,19 @@
+{
+  "autohotkey": {
+    "version": "2.0.29",
+    "tag": "v2.0.29",
+    "zip": "AutoHotkey_2.0.29.zip"
+  },
+  "ux": {
+    "repository": "snownico0722/AutoHotkeyUX",
+    "ref": "cn-localization-initial"
+  },
+  "ahk2exe": {
+    "repository": "snownico0722/Ahk2Exe",
+    "ref": "cn-localization-initial",
+    "upstreamVersion": "1.1.37.02a2"
+  },
+  "bootstrap": {
+    "autohotkeyV1Version": "1.1.37.02"
+  }
+}
