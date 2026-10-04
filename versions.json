@@ -2,18 +2,21 @@
   "autohotkey": {
     "version": "2.0.29",
     "tag": "v2.0.29",
-    "zip": "AutoHotkey_2.0.29.zip"
+    "zip": "AutoHotkey_2.0.29.zip",
+    "sha256": "b2d0200724a6b6ad22c965c939c5e5a2c64a35d1ccb455a3ca3f8ce415c5a296"
   },
   "ux": {
     "repository": "snownico0722/AutoHotkeyUX",
-    "ref": "cn-localization-initial"
+    "ref": "8a16a74180b375542ea14f4b9e067c68cd064185"
   },
   "ahk2exe": {
     "repository": "snownico0722/Ahk2Exe",
-    "ref": "cn-localization-initial",
-    "upstreamVersion": "1.1.37.02a2"
+    "ref": "0cc9b004c4d101061338f81399cbf8806487f2ce",
+    "upstreamVersion": "1.1.37.02a2",
+    "upstreamSha256": "c29b8c3a5124850d79fc9e66e2ca79677c377d7f31631ad3022ba159c5d9e3be"
   },
   "bootstrap": {
-    "autohotkeyV1Version": "1.1.37.02"
+    "autohotkeyV1Version": "1.1.37.02",
+    "autohotkeyV1Sha256": "6f3663f7cdd25063c8c8728f5d9b07813ced8780522fd1f124ba539e2854215f"
   }
 }
