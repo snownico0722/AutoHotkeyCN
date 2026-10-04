@@ -78,12 +78,12 @@ jobs:
           $candidates = @((Get-Item $extract)) + @(Get-ChildItem $extract -Directory -Recurse)
           foreach ($candidate in $candidates) {
             if ((Test-Path (Join-Path $candidate.FullName 'UX')) -and
-                (Test-Path (Join-Path $candidate.FullName 'v2'))) {
+                (Test-Path (Join-Path $candidate.FullName 'AutoHotkey32.exe'))) {
               $root = $candidate.FullName
               break
             }
           }
-          if (-not $root) { throw "Could not locate AutoHotkey distribution root (UX + v2)." }
+          if (-not $root) { throw "Could not locate AutoHotkey portable distribution root (UX + AutoHotkey32.exe)." }
 
           New-Item -ItemType Directory -Path "$pwd\dist\AutoHotkey" -Force | Out-Null
           Copy-Item (Join-Path $root '*') "$pwd\dist\AutoHotkey" -Recurse -Force
@@ -148,7 +148,7 @@ jobs:
           @echo off
           chcp 65001 >nul
           cd /d "%~dp0"
-          "%~dp0UX\AutoHotkeyUX.exe" /script "%~dp0UX\ui-setup.ahk"
+          start "" "%~dp0AutoHotkey32.exe" "%~dp0UX\ui-setup.ahk"
           '@ | Set-Content "$root\安装中文版.cmd" -Encoding UTF8
 
           @"
