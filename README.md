@@ -12,8 +12,8 @@ AutoHotkey v2 的简体中文发行打包仓库。
 当前基线：
 
 - AutoHotkey Core：**v2.0.29**
-- AutoHotkeyUX：`cn-localization-initial`（测试阶段）
-- Ahk2Exe：`cn-localization-initial`（测试阶段）
+- AutoHotkeyUX：锁定到已审查 commit（见 `versions.json`）
+- Ahk2Exe：锁定到已审查 commit（见 `versions.json`）
 - Ahk2Exe 上游基线：**v1.1.37.02a2**
 - Ahk2Exe 自举 Base：AutoHotkey **v1.1.37.02 U32**
 
@@ -33,7 +33,7 @@ AutoHotkey v2 的简体中文发行打包仓库。
 
 ZIP 内额外提供 `安装中文版.cmd`，用于直接启动中文安装界面。
 
-> 当前为预览构建。UX 与 Ahk2Exe 的中文化 PR 合并并验证后，再把总装仓库的 ref 从测试分支切换为各 fork 的默认分支。
+> 当前为预览构建。总装使用 commit SHA 锁定中文 UX 与 Ahk2Exe，确保同一版本可重复构建。
 
 ## 上游
 
