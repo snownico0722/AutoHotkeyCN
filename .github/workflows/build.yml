@@ -120,8 +120,17 @@ jobs:
           if (-not $officialCompiler) { throw "Official Ahk2Exe.exe was not found." }
 
           $localizedExe = "$env:RUNNER_TEMP\Ahk2Exe-CN.exe"
-          & $officialCompiler.FullName /in "$pwd\sources\Ahk2Exe\Ahk2Exe.ahk" /out $localizedExe /base $base.FullName /compress 0 /silent verbose
-          if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Localized Ahk2Exe compilation failed with exit code $LASTEXITCODE." }
+          $args = @(
+            '/in', "$pwd\sources\Ahk2Exe\Ahk2Exe.ahk",
+            '/out', $localizedExe,
+            '/base', $base.FullName,
+            '/compress', '0',
+            '/silent', 'verbose'
+          )
+          $process = Start-Process -FilePath $officialCompiler.FullName -ArgumentList $args -Wait -PassThru
+          if ($process.ExitCode -ne 0 -and -not (Test-Path $localizedExe)) {
+            throw "Localized Ahk2Exe compilation failed with exit code $($process.ExitCode)."
+          }
           if (-not (Test-Path $localizedExe)) { throw "Localized Ahk2Exe.exe was not produced." }
 
           $compilerDir = "$pwd\dist\AutoHotkey\Compiler"
