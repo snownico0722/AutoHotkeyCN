@@ -29,11 +29,11 @@ AutoHotkey v2 的简体中文发行打包仓库。
 4. 用官方 Ahk2Exe 自举编译中文 `Ahk2Exe.exe`；
 5. 将中文版编译器装入 `Compiler`；
 6. 生成 SHA256；
-7. 上传 `AutoHotkey_2.0.29_CN-preview.zip` Artifact。
+7. 上传 `AutoHotkey_2.0.29_CN.zip` Artifact。
 
 ZIP 内额外提供 `安装中文版.cmd`，用于直接启动中文安装界面。
 
-> 当前为预览构建。总装使用 commit SHA 锁定中文 UX 与 Ahk2Exe，确保同一版本可重复构建。
+> 总装使用 commit SHA 锁定中文 UX 与 Ahk2Exe，确保同一版本可重复构建。
 
 ## 上游
 
